@@ -7,16 +7,60 @@ import (
 	"github.com/SCKelemen/layout"
 )
 
+// StrokeLinecap defines how the end of a stroke is rendered
+type StrokeLinecap string
+
+const (
+	StrokeLinecapButt   StrokeLinecap = "butt"
+	StrokeLinecapRound  StrokeLinecap = "round"
+	StrokeLinecapSquare StrokeLinecap = "square"
+)
+
+// StrokeLinejoin defines how corners of a stroke are rendered
+type StrokeLinejoin string
+
+const (
+	StrokeLinejoinMiter StrokeLinejoin = "miter"
+	StrokeLinejoinRound StrokeLinejoin = "round"
+	StrokeLinejoinBevel StrokeLinejoin = "bevel"
+)
+
+// TextAnchor defines horizontal text alignment
+type TextAnchor string
+
+const (
+	TextAnchorStart  TextAnchor = "start"
+	TextAnchorMiddle TextAnchor = "middle"
+	TextAnchorEnd    TextAnchor = "end"
+)
+
+// DominantBaseline defines vertical text alignment
+type DominantBaseline string
+
+const (
+	DominantBaselineAuto         DominantBaseline = "auto"
+	DominantBaselineMiddle       DominantBaseline = "middle"
+	DominantBaselineHanging      DominantBaseline = "hanging"
+	DominantBaselineTextTop      DominantBaseline = "text-top"
+	DominantBaselineTextBottom   DominantBaseline = "text-bottom"
+	DominantBaselineAlphabetic   DominantBaseline = "alphabetic"
+	DominantBaselineMathematical DominantBaseline = "mathematical"
+)
+
 // Style represents styling attributes for SVG elements
 type Style struct {
-	Fill         string
-	Stroke       string
-	StrokeWidth  float64
-	Opacity      float64
-	FillOpacity  float64
-	StrokeOpacity float64
-	Class        string
-	ClipPath     string
+	Fill             string
+	Stroke           string
+	StrokeWidth      float64
+	StrokeLinecap    StrokeLinecap
+	StrokeLinejoin   StrokeLinejoin
+	Opacity          float64
+	FillOpacity      float64
+	StrokeOpacity    float64
+	Class            string
+	ClipPath         string
+	TextAnchor       TextAnchor
+	DominantBaseline DominantBaseline
 }
 
 // Rect renders an SVG rectangle
@@ -24,6 +68,16 @@ func Rect(x, y, width, height float64, style Style) string {
 	attrs := formatStyle(style)
 	return fmt.Sprintf(`<rect x="%.2f" y="%.2f" width="%.2f" height="%.2f"%s/>`,
 		x, y, width, height, attrs)
+}
+
+// RoundedRect renders an SVG rectangle with rounded corners
+func RoundedRect(x, y, width, height, rx, ry float64, style Style) string {
+	attrs := formatStyle(style)
+	if ry == 0 {
+		ry = rx // If ry not specified, use rx for both
+	}
+	return fmt.Sprintf(`<rect x="%.2f" y="%.2f" width="%.2f" height="%.2f" rx="%.2f" ry="%.2f"%s/>`,
+		x, y, width, height, rx, ry, attrs)
 }
 
 // Circle renders an SVG circle
@@ -83,6 +137,12 @@ func formatStyle(s Style) string {
 	if s.StrokeWidth > 0 {
 		attrs = append(attrs, fmt.Sprintf(`stroke-width="%.2f"`, s.StrokeWidth))
 	}
+	if s.StrokeLinecap != "" {
+		attrs = append(attrs, fmt.Sprintf(`stroke-linecap="%s"`, string(s.StrokeLinecap)))
+	}
+	if s.StrokeLinejoin != "" {
+		attrs = append(attrs, fmt.Sprintf(`stroke-linejoin="%s"`, string(s.StrokeLinejoin)))
+	}
 	if s.Opacity > 0 && s.Opacity < 1 {
 		attrs = append(attrs, fmt.Sprintf(`opacity="%.2f"`, s.Opacity))
 	}
@@ -97,6 +157,12 @@ func formatStyle(s Style) string {
 	}
 	if s.ClipPath != "" {
 		attrs = append(attrs, fmt.Sprintf(`clip-path="%s"`, s.ClipPath))
+	}
+	if s.TextAnchor != "" {
+		attrs = append(attrs, fmt.Sprintf(`text-anchor="%s"`, string(s.TextAnchor)))
+	}
+	if s.DominantBaseline != "" {
+		attrs = append(attrs, fmt.Sprintf(`dominant-baseline="%s"`, string(s.DominantBaseline)))
 	}
 
 	if len(attrs) == 0 {
