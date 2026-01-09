@@ -7,7 +7,8 @@ import (
 )
 
 func main() {
-	fmt.Println("=== SVG Tier 1 Features Demo ===\n")
+	fmt.Println("=== SVG Tier 1 Features Demo ===")
+	fmt.Println()
 
 	// 1. PathBuilder
 	fmt.Println("1. PathBuilder - Clean path construction")
