@@ -2,6 +2,7 @@ package svg
 
 import (
 	"bytes"
+	"image/color"
 	"image/png"
 	"math"
 	"strings"
@@ -321,6 +322,8 @@ func TestParseLengthFloatSupportsUnits(t *testing.T) {
 		{"72pt", 96},
 		{"6pc", 96},
 		{"400q", 96 / 101.6 * 400},
+		{"400Q", 96 / 101.6 * 400},
+		{"1e2px", 100},
 	}
 
 	for _, tt := range tests {
@@ -328,6 +331,13 @@ func TestParseLengthFloatSupportsUnits(t *testing.T) {
 		if math.Abs(got-tt.expected) > 0.001 {
 			t.Fatalf("parseLengthFloat(%q) = %f, expected %f", tt.input, got, tt.expected)
 		}
+	}
+}
+
+func TestParseLengthFloatWithReferenceSupportsPercentages(t *testing.T) {
+	got := parseLengthFloatWithReference("37.5%", 96, 200)
+	if math.Abs(got-75) > 0.001 {
+		t.Fatalf("parseLengthFloatWithReference(37.5%%) = %f, expected 75", got)
 	}
 }
 
@@ -455,4 +465,71 @@ func TestParseColor(t *testing.T) {
 			t.Errorf("parseColor(%q) returned nil", c)
 		}
 	}
+}
+
+func TestParseColorAdvancedFormats(t *testing.T) {
+	tests := []struct {
+		input     string
+		want      color.RGBA
+		tolerance int
+	}{
+		{
+			input:     "rgb(255, 0, 0)",
+			want:      color.RGBA{R: 255, G: 0, B: 0, A: 255},
+			tolerance: 0,
+		},
+		{
+			input:     "hsl(120, 100%, 50%)",
+			want:      color.RGBA{R: 0, G: 255, B: 0, A: 255},
+			tolerance: 1,
+		},
+		{
+			input:     "#336699cc",
+			want:      color.RGBA{R: 51, G: 102, B: 153, A: 204},
+			tolerance: 0,
+		},
+		{
+			input:     "rgb(255 0 0 / 50%)",
+			want:      color.RGBA{R: 255, G: 0, B: 0, A: 128},
+			tolerance: 1,
+		},
+	}
+
+	for _, tt := range tests {
+		got := color.RGBAModel.Convert(parseColor(tt.input)).(color.RGBA)
+		if colorDistance(got, tt.want) > tt.tolerance {
+			t.Fatalf("parseColor(%q) = %#v, expected %#v", tt.input, got, tt.want)
+		}
+	}
+}
+
+func colorDistance(a, b color.RGBA) int {
+	dr := int(a.R) - int(b.R)
+	if dr < 0 {
+		dr = -dr
+	}
+	dg := int(a.G) - int(b.G)
+	if dg < 0 {
+		dg = -dg
+	}
+	db := int(a.B) - int(b.B)
+	if db < 0 {
+		db = -db
+	}
+	da := int(a.A) - int(b.A)
+	if da < 0 {
+		da = -da
+	}
+
+	max := dr
+	if dg > max {
+		max = dg
+	}
+	if db > max {
+		max = db
+	}
+	if da > max {
+		max = da
+	}
+	return max
 }

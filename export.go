@@ -12,10 +12,13 @@ import (
 	"image/png"
 	"io"
 	"math"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
 
+	sccolor "github.com/SCKelemen/color"
+	"github.com/SCKelemen/units"
 	"golang.org/x/image/vector"
 )
 
@@ -32,6 +35,8 @@ const (
 )
 
 const defaultRasterDPI = 96.0
+
+var cssLengthTokenPattern = regexp.MustCompile(`^([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?)([a-z]*)$`)
 
 // ExportOptions configures export settings
 type ExportOptions struct {
@@ -320,51 +325,73 @@ func parseLengthFloat(s string, dpi float64) float64 {
 // parseLengthFloatWithReference parses a length string using the provided
 // reference value for percentage lengths.
 func parseLengthFloatWithReference(s string, dpi, reference float64) float64 {
-	s = strings.ToLower(strings.TrimSpace(s))
-	if s == "" {
+	token := strings.ToLower(strings.Join(strings.Fields(strings.TrimSpace(s)), ""))
+	if token == "" {
 		return 0
 	}
-	if strings.HasSuffix(s, "%") {
+	if strings.HasSuffix(token, "%") {
 		if reference <= 0 {
 			return 0
 		}
-		num := strings.TrimSpace(strings.TrimSuffix(s, "%"))
+		num := strings.TrimSuffix(token, "%")
 		val, err := strconv.ParseFloat(num, 64)
 		if err != nil {
 			return 0
 		}
-		return reference * (val / 100.0)
+		return units.Percent(val).Of(reference)
 	}
 
-	units := []struct {
-		suffix string
-		factor float64
-	}{
-		{"px", 1},
-		{"pt", dpi / 72.0},
-		{"pc", dpi / 6.0},
-		{"in", dpi},
-		{"cm", dpi / 2.54},
-		{"mm", dpi / 25.4},
-		{"q", dpi / 101.6},
+	matches := cssLengthTokenPattern.FindStringSubmatch(token)
+	if len(matches) != 3 {
+		return 0
 	}
 
-	for _, unit := range units {
-		if strings.HasSuffix(s, unit.suffix) {
-			num := strings.TrimSpace(strings.TrimSuffix(s, unit.suffix))
-			val, err := strconv.ParseFloat(num, 64)
-			if err != nil {
-				return 0
-			}
-			return val * unit.factor
-		}
+	val, err := strconv.ParseFloat(matches[1], 64)
+	if err != nil {
+		return 0
 	}
+	unitSuffix := matches[2]
 
-	if val, err := strconv.ParseFloat(s, 64); err == nil {
+	if unitSuffix == "" {
 		return val
 	}
 
-	return 0
+	length, ok := absoluteLengthFromUnit(val, unitSuffix)
+	if !ok {
+		return 0
+	}
+
+	px, err := length.ToPx()
+	if err != nil {
+		return 0
+	}
+
+	if unitSuffix == "px" {
+		return px.Value
+	}
+
+	return px.Value * (dpi / defaultRasterDPI)
+}
+
+func absoluteLengthFromUnit(value float64, unitSuffix string) (units.Length, bool) {
+	switch unitSuffix {
+	case "px":
+		return units.Px(value), true
+	case "pt":
+		return units.Pt(value), true
+	case "pc":
+		return units.Pc(value), true
+	case "in":
+		return units.In(value), true
+	case "cm":
+		return units.Cm(value), true
+	case "mm":
+		return units.Mm(value), true
+	case "q":
+		return units.Q(value), true
+	default:
+		return units.Length{}, false
+	}
 }
 
 // renderElement renders an SVG element to the image.
@@ -601,59 +628,21 @@ func drawBrush(img *image.RGBA, cx, cy, brush, half int, c color.Color) {
 func parseColor(s string) color.Color {
 	s = strings.TrimSpace(s)
 
-	if s == "" || s == "none" {
+	if s == "" || strings.EqualFold(s, "none") {
 		return color.Transparent
 	}
 
-	// Handle hex colors
-	if strings.HasPrefix(s, "#") {
-		s = strings.TrimPrefix(s, "#")
-
-		var r, g, b uint8
-
-		if len(s) == 6 {
-			// #RRGGBB
-			v1, err1 := strconv.ParseUint(s[0:2], 16, 8)
-			v2, err2 := strconv.ParseUint(s[2:4], 16, 8)
-			v3, err3 := strconv.ParseUint(s[4:6], 16, 8)
-			if err1 != nil || err2 != nil || err3 != nil {
-				return color.Transparent
-			}
-			r = uint8(v1)
-			g = uint8(v2)
-			b = uint8(v3)
-		} else if len(s) == 3 {
-			// #RGB (shorthand)
-			v1, err1 := strconv.ParseUint(s[0:1], 16, 8)
-			v2, err2 := strconv.ParseUint(s[1:2], 16, 8)
-			v3, err3 := strconv.ParseUint(s[2:3], 16, 8)
-			if err1 != nil || err2 != nil || err3 != nil {
-				return color.Transparent
-			}
-			r = uint8(v1 * 17) // 0xF -> 0xFF
-			g = uint8(v2 * 17)
-			b = uint8(v3 * 17)
-		} else {
-			return color.Transparent
-		}
-
-		return color.RGBA{R: r, G: g, B: b, A: 255}
+	parsed, err := sccolor.ParseColor(s)
+	if err != nil {
+		return color.Transparent
 	}
 
-	// Handle named colors
-	switch s {
-	case "white":
-		return color.White
-	case "black":
-		return color.Black
-	case "red":
-		return color.RGBA{R: 255, A: 255}
-	case "green":
-		return color.RGBA{G: 255, A: 255}
-	case "blue":
-		return color.RGBA{B: 255, A: 255}
-	default:
-		return color.Transparent
+	r, g, b, a := parsed.RGBA()
+	return color.RGBA{
+		R: uint8(math.Round(clamp01(r) * 255)),
+		G: uint8(math.Round(clamp01(g) * 255)),
+		B: uint8(math.Round(clamp01(b) * 255)),
+		A: uint8(math.Round(clamp01(a) * 255)),
 	}
 }
 
