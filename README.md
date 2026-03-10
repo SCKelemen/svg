@@ -41,12 +41,12 @@ func main() {
         Style: layout.Style{
             Display: layout.DisplayFlex,
             FlexDirection: layout.FlexDirectionRow,
-            Width: 400,
-            Height: 200,
+            Width: layout.Px(400),
+            Height: layout.Px(200),
         },
         Children: []*layout.Node{
-            {Style: layout.Style{Width: 100, Height: 100}},
-            {Style: layout.Style{Width: 100, Height: 100}},
+            {Style: layout.Style{Width: layout.Px(100), Height: layout.Px(100)}},
+            {Style: layout.Style{Width: layout.Px(100), Height: layout.Px(100)}},
         },
     }
 
@@ -71,7 +71,7 @@ func main() {
 renderer := svg.NewRenderer(svg.Options{
     Width: 800,
     Height: 600,
-    StyleSheet: svg.DefaultStyles(),
+    StyleSheet: svg.DefaultStyleSheet(),
 })
 
 // Render with custom styles
@@ -81,20 +81,20 @@ output := renderer.Render(root)
 ### Gradients
 
 ```go
-// Create a gradient with multiple color spaces
-gradient := svg.LinearGradient{
+// Create a simple two-stop linear gradient definition
+gradientDef := svg.LinearGradient(svg.LinearGradientDef{
     ID: "myGradient",
-    X1: 0, Y1: 0,
-    X2: 100, Y2: 0,
+    X1: "0%", Y1: "0%",
+    X2: "100%", Y2: "0%",
     Stops: []svg.GradientStop{
         {Offset: "0%", Color: "#3B82F6"},
         {Offset: "100%", Color: "#8B5CF6"},
     },
-    ColorSpace: color.GradientOKLCH, // Perceptually uniform gradients
-}
+})
 
-// Apply gradient to elements
-svgElement := fmt.Sprintf(`<rect fill="url(#myGradient)" x="0" y="0" width="100" height="50"/>`)
+// Apply gradient to an element
+svgElement := fmt.Sprintf(`<rect fill="%s" x="0" y="0" width="100" height="50"/>`, svg.GradientURL("myGradient"))
+_ = gradientDef
 ```
 
 ### PathBuilder - Fluent API for Paths
@@ -150,10 +150,15 @@ decoratedPath := svg.PathWithMarkers(
     svg.MarkerURL("arrow-blue"),  // end marker
 )
 
-// Render with markers in defs
-output := svg.RenderToSVG(svg.SVGConfig{
-    Width: 400, Height: 300,
-}, arrow, circle, decoratedPath)
+// Build an SVG manually with marker definitions in <defs>
+output := fmt.Sprintf(`<svg width="400" height="300" viewBox="0 0 400 300" xmlns="http://www.w3.org/2000/svg">
+<defs>
+%s
+%s
+%s
+</defs>
+%s
+</svg>`, arrow, circle, diamond, decoratedPath)
 ```
 
 Available marker types:

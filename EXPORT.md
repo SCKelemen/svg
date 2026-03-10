@@ -152,10 +152,10 @@ For complex SVGs with many elements, performance is limited by the vector raster
 ### Export Chart to PNG
 
 ```go
-// Create a chart
-chart := svg.New(800, 600)
-// ... add chart elements ...
-svgData := chart.String()
+// Generate an SVG string (from RenderToSVG or hand-built markup)
+svgData := `<svg width="800" height="600">
+  <rect x="0" y="0" width="800" height="600" fill="#ffffff"/>
+</svg>`
 
 // Export to PNG
 opts := svg.ExportOptions{

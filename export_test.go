@@ -1,9 +1,33 @@
 package svg
 
 import (
+	"bytes"
+	"image/png"
 	"strings"
 	"testing"
 )
+
+func countNonWhitePixelsFromPNG(t *testing.T, pngData []byte) int {
+	t.Helper()
+
+	img, err := png.Decode(bytes.NewReader(pngData))
+	if err != nil {
+		t.Fatalf("failed to decode PNG: %v", err)
+	}
+
+	b := img.Bounds()
+	count := 0
+	for y := b.Min.Y; y < b.Max.Y; y++ {
+		for x := b.Min.X; x < b.Max.X; x++ {
+			r, g, b, a := img.At(x, y).RGBA()
+			if !(r == 0xffff && g == 0xffff && b == 0xffff && a == 0xffff) {
+				count++
+			}
+		}
+	}
+
+	return count
+}
 
 func TestExportSVG(t *testing.T) {
 	svgData := `<svg width="100" height="100"><rect x="10" y="10" width="80" height="80" fill="#ff0000"/></svg>`
@@ -71,6 +95,67 @@ func TestExportCircle(t *testing.T) {
 
 	if len(result) == 0 {
 		t.Fatal("Circle export returned empty result")
+	}
+}
+
+func TestExportGroupedElements(t *testing.T) {
+	svgData := `<svg width="100" height="100">
+		<g>
+			<rect x="10" y="10" width="30" height="30" fill="#ff0000"/>
+		</g>
+	</svg>`
+
+	opts := ExportOptions{
+		Format: FormatPNG,
+		Width:  100,
+		Height: 100,
+	}
+
+	result, err := Export(svgData, opts)
+	if err != nil {
+		t.Fatalf("grouped export failed: %v", err)
+	}
+
+	nonWhite := countNonWhitePixelsFromPNG(t, result)
+	if nonWhite == 0 {
+		t.Fatal("expected grouped content to render, got fully white image")
+	}
+}
+
+func TestExportMalformedSVGReturnsError(t *testing.T) {
+	svgData := `<svg><rect></svg`
+
+	_, err := Export(svgData, ExportOptions{
+		Format: FormatPNG,
+		Width:  100,
+		Height: 100,
+	})
+	if err == nil {
+		t.Fatal("expected malformed SVG to return an error")
+	}
+}
+
+func TestExportLineDoesNotFloodCanvas(t *testing.T) {
+	svgData := `<svg width="100" height="100">
+		<line x1="10" y1="10" x2="90" y2="90" stroke="#ff0000" stroke-width="1"/>
+	</svg>`
+
+	result, err := Export(svgData, ExportOptions{
+		Format: FormatPNG,
+		Width:  100,
+		Height: 100,
+	})
+	if err != nil {
+		t.Fatalf("line export failed: %v", err)
+	}
+
+	nonWhite := countNonWhitePixelsFromPNG(t, result)
+	if nonWhite == 0 {
+		t.Fatal("expected line to render, got fully white image")
+	}
+	// A 1px diagonal line in 100x100 should not fill most of the canvas.
+	if nonWhite > 1000 {
+		t.Fatalf("expected line rendering to stay narrow, got %d non-white pixels", nonWhite)
 	}
 }
 

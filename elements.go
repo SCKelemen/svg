@@ -81,12 +81,15 @@ type Style struct {
 	Fill             string
 	Stroke           string
 	StrokeWidth      float64
-	StrokeDashArray  string        // Dash pattern, e.g. "5,5" or "10,5,2,5"
+	StrokeDashArray  string // Dash pattern, e.g. "5,5" or "10,5,2,5"
 	StrokeLinecap    StrokeLinecap
 	StrokeLinejoin   StrokeLinejoin
 	Opacity          float64
+	OpacitySet       bool // Emit opacity attribute even when value is 0 or 1
 	FillOpacity      float64
+	FillOpacitySet   bool // Emit fill-opacity attribute even when value is 0 or 1
 	StrokeOpacity    float64
+	StrokeOpacitySet bool // Emit stroke-opacity attribute even when value is 0 or 1
 	Class            string
 	ClipPath         string
 	TextAnchor       TextAnchor
@@ -204,23 +207,23 @@ func TextPath(content string, pathID string, style Style, startOffset string) st
 	attrs := formatStyle(style)
 	offsetAttr := ""
 	if startOffset != "" {
-		offsetAttr = fmt.Sprintf(` startOffset="%s"`, startOffset)
+		offsetAttr = fmt.Sprintf(` startOffset="%s"`, escapeAttr(startOffset))
 	}
 	return fmt.Sprintf(`<textPath href="#%s"%s%s>%s</textPath>`,
-		pathID, offsetAttr, attrs, escapeXML(content))
+		escapeAttr(pathID), offsetAttr, attrs, escapeXML(content))
 }
 
 // Path renders an SVG path
 func Path(d string, style Style) string {
 	attrs := formatStyle(style)
-	return fmt.Sprintf(`<path d="%s"%s/>`, d, attrs)
+	return fmt.Sprintf(`<path d="%s"%s/>`, escapeAttr(d), attrs)
 }
 
 // Group wraps content in an SVG <g> element with optional transform
 func Group(content string, transform string, style Style) string {
 	var attrs string
 	if transform != "" {
-		attrs = fmt.Sprintf(` transform="%s"`, transform)
+		attrs = fmt.Sprintf(` transform="%s"`, escapeAttr(transform))
 	}
 	attrs += formatStyle(style)
 
@@ -238,56 +241,62 @@ func formatStyle(s Style) string {
 	var attrs []string
 
 	if s.Fill != "" {
-		attrs = append(attrs, fmt.Sprintf(`fill="%s"`, s.Fill))
+		attrs = append(attrs, fmt.Sprintf(`fill="%s"`, escapeAttr(s.Fill)))
 	}
 	if s.Stroke != "" {
-		attrs = append(attrs, fmt.Sprintf(`stroke="%s"`, s.Stroke))
+		attrs = append(attrs, fmt.Sprintf(`stroke="%s"`, escapeAttr(s.Stroke)))
 	}
 	if s.StrokeWidth > 0 {
 		attrs = append(attrs, fmt.Sprintf(`stroke-width="%.2f"`, s.StrokeWidth))
 	}
 	if s.StrokeDashArray != "" {
-		attrs = append(attrs, fmt.Sprintf(`stroke-dasharray="%s"`, s.StrokeDashArray))
+		attrs = append(attrs, fmt.Sprintf(`stroke-dasharray="%s"`, escapeAttr(s.StrokeDashArray)))
 	}
 	if s.StrokeLinecap != "" {
-		attrs = append(attrs, fmt.Sprintf(`stroke-linecap="%s"`, string(s.StrokeLinecap)))
+		attrs = append(attrs, fmt.Sprintf(`stroke-linecap="%s"`, escapeAttr(string(s.StrokeLinecap))))
 	}
 	if s.StrokeLinejoin != "" {
-		attrs = append(attrs, fmt.Sprintf(`stroke-linejoin="%s"`, string(s.StrokeLinejoin)))
+		attrs = append(attrs, fmt.Sprintf(`stroke-linejoin="%s"`, escapeAttr(string(s.StrokeLinejoin))))
 	}
-	if s.Opacity > 0 && s.Opacity < 1 {
+	if s.OpacitySet {
+		attrs = append(attrs, fmt.Sprintf(`opacity="%.2f"`, clamp01(s.Opacity)))
+	} else if s.Opacity > 0 && s.Opacity < 1 {
 		attrs = append(attrs, fmt.Sprintf(`opacity="%.2f"`, s.Opacity))
 	}
-	if s.FillOpacity > 0 && s.FillOpacity < 1 {
+	if s.FillOpacitySet {
+		attrs = append(attrs, fmt.Sprintf(`fill-opacity="%.2f"`, clamp01(s.FillOpacity)))
+	} else if s.FillOpacity > 0 && s.FillOpacity < 1 {
 		attrs = append(attrs, fmt.Sprintf(`fill-opacity="%.2f"`, s.FillOpacity))
 	}
-	if s.StrokeOpacity > 0 && s.StrokeOpacity < 1 {
+	if s.StrokeOpacitySet {
+		attrs = append(attrs, fmt.Sprintf(`stroke-opacity="%.2f"`, clamp01(s.StrokeOpacity)))
+	} else if s.StrokeOpacity > 0 && s.StrokeOpacity < 1 {
 		attrs = append(attrs, fmt.Sprintf(`stroke-opacity="%.2f"`, s.StrokeOpacity))
 	}
 	if s.Class != "" {
-		attrs = append(attrs, fmt.Sprintf(`class="%s"`, s.Class))
+		attrs = append(attrs, fmt.Sprintf(`class="%s"`, escapeAttr(s.Class)))
 	}
 	if s.ClipPath != "" {
-		attrs = append(attrs, fmt.Sprintf(`clip-path="%s"`, s.ClipPath))
+		attrs = append(attrs, fmt.Sprintf(`clip-path="%s"`, escapeAttr(s.ClipPath)))
 	}
 	if s.TextAnchor != "" {
-		attrs = append(attrs, fmt.Sprintf(`text-anchor="%s"`, string(s.TextAnchor)))
+		attrs = append(attrs, fmt.Sprintf(`text-anchor="%s"`, escapeAttr(string(s.TextAnchor))))
 	}
 	if s.DominantBaseline != "" {
-		attrs = append(attrs, fmt.Sprintf(`dominant-baseline="%s"`, string(s.DominantBaseline)))
+		attrs = append(attrs, fmt.Sprintf(`dominant-baseline="%s"`, escapeAttr(string(s.DominantBaseline))))
 	}
 	if s.FontFamily != "" {
-		attrs = append(attrs, fmt.Sprintf(`font-family="%s"`, s.FontFamily))
+		attrs = append(attrs, fmt.Sprintf(`font-family="%s"`, escapeAttr(s.FontFamily)))
 	}
 	if s.FontSize.Value != 0 {
 		// Format as "valueunit" (e.g., "16px", "1.5em", "2rem")
-		attrs = append(attrs, fmt.Sprintf(`font-size="%s"`, s.FontSize.String()))
+		attrs = append(attrs, fmt.Sprintf(`font-size="%s"`, escapeAttr(s.FontSize.String())))
 	}
 	if s.FontWeight != "" {
-		attrs = append(attrs, fmt.Sprintf(`font-weight="%s"`, string(s.FontWeight)))
+		attrs = append(attrs, fmt.Sprintf(`font-weight="%s"`, escapeAttr(string(s.FontWeight))))
 	}
 	if s.FontStyle != "" {
-		attrs = append(attrs, fmt.Sprintf(`font-style="%s"`, string(s.FontStyle)))
+		attrs = append(attrs, fmt.Sprintf(`font-style="%s"`, escapeAttr(string(s.FontStyle))))
 	}
 
 	if len(attrs) == 0 {
@@ -305,6 +314,21 @@ func escapeXML(s string) string {
 	s = strings.ReplaceAll(s, "\"", "&quot;")
 	s = strings.ReplaceAll(s, "'", "&apos;")
 	return s
+}
+
+// escapeAttr escapes XML-sensitive characters in attribute values.
+func escapeAttr(s string) string {
+	return escapeXML(s)
+}
+
+func clamp01(v float64) float64 {
+	if v < 0 {
+		return 0
+	}
+	if v > 1 {
+		return 1
+	}
+	return v
 }
 
 // GetTransformFromNode extracts SVG transform attribute from a layout node

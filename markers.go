@@ -9,7 +9,7 @@ import (
 type MarkerUnits string
 
 const (
-	MarkerUnitsStrokeWidth  MarkerUnits = "strokeWidth"
+	MarkerUnitsStrokeWidth    MarkerUnits = "strokeWidth"
 	MarkerUnitsUserSpaceOnUse MarkerUnits = "userSpaceOnUse"
 )
 
@@ -24,11 +24,11 @@ const (
 // MarkerDef represents a marker definition
 type MarkerDef struct {
 	ID           string
-	ViewBox      string      // e.g., "0 0 10 10"
-	RefX         float64     // Reference point X
-	RefY         float64     // Reference point Y
-	MarkerWidth  float64     // Width of marker viewport
-	MarkerHeight float64     // Height of marker viewport
+	ViewBox      string       // e.g., "0 0 10 10"
+	RefX         float64      // Reference point X
+	RefY         float64      // Reference point Y
+	MarkerWidth  float64      // Width of marker viewport
+	MarkerHeight float64      // Height of marker viewport
 	Orient       MarkerOrient // auto, auto-start-reverse, or angle
 	MarkerUnits  MarkerUnits
 	Content      string // SVG content inside the marker
@@ -38,10 +38,10 @@ type MarkerDef struct {
 func Marker(def MarkerDef) string {
 	var b strings.Builder
 
-	b.WriteString(fmt.Sprintf(`<marker id="%s"`, def.ID))
+	b.WriteString(fmt.Sprintf(`<marker id="%s"`, escapeAttr(def.ID)))
 
 	if def.ViewBox != "" {
-		b.WriteString(fmt.Sprintf(` viewBox="%s"`, def.ViewBox))
+		b.WriteString(fmt.Sprintf(` viewBox="%s"`, escapeAttr(def.ViewBox)))
 	}
 
 	b.WriteString(fmt.Sprintf(` refX="%.2f" refY="%.2f"`, def.RefX, def.RefY))
@@ -54,11 +54,11 @@ func Marker(def MarkerDef) string {
 	}
 
 	if def.Orient != "" {
-		b.WriteString(fmt.Sprintf(` orient="%s"`, string(def.Orient)))
+		b.WriteString(fmt.Sprintf(` orient="%s"`, escapeAttr(string(def.Orient))))
 	}
 
 	if def.MarkerUnits != "" {
-		b.WriteString(fmt.Sprintf(` markerUnits="%s"`, string(def.MarkerUnits)))
+		b.WriteString(fmt.Sprintf(` markerUnits="%s"`, escapeAttr(string(def.MarkerUnits))))
 	}
 
 	b.WriteString(">")
@@ -93,7 +93,7 @@ func StyleWithMarkers(style Style, markers MarkerStyle) Style {
 
 // ArrowMarker creates a simple arrow marker pointing right
 func ArrowMarker(id string, color string) string {
-	content := fmt.Sprintf(`<path d="M 0 0 L 10 5 L 0 10 Z" fill="%s"/>`, color)
+	content := fmt.Sprintf(`<path d="M 0 0 L 10 5 L 0 10 Z" fill="%s"/>`, escapeAttr(color))
 	return Marker(MarkerDef{
 		ID:           id,
 		ViewBox:      "0 0 10 10",
@@ -108,7 +108,7 @@ func ArrowMarker(id string, color string) string {
 
 // CircleMarker creates a circular marker
 func CircleMarker(id string, color string) string {
-	content := fmt.Sprintf(`<circle cx="5" cy="5" r="4" fill="%s"/>`, color)
+	content := fmt.Sprintf(`<circle cx="5" cy="5" r="4" fill="%s"/>`, escapeAttr(color))
 	return Marker(MarkerDef{
 		ID:           id,
 		ViewBox:      "0 0 10 10",
@@ -123,7 +123,7 @@ func CircleMarker(id string, color string) string {
 
 // SquareMarker creates a square marker
 func SquareMarker(id string, color string) string {
-	content := fmt.Sprintf(`<rect x="1" y="1" width="8" height="8" fill="%s"/>`, color)
+	content := fmt.Sprintf(`<rect x="1" y="1" width="8" height="8" fill="%s"/>`, escapeAttr(color))
 	return Marker(MarkerDef{
 		ID:           id,
 		ViewBox:      "0 0 10 10",
@@ -138,7 +138,7 @@ func SquareMarker(id string, color string) string {
 
 // DiamondMarker creates a diamond marker
 func DiamondMarker(id string, color string) string {
-	content := fmt.Sprintf(`<path d="M 5 1 L 9 5 L 5 9 L 1 5 Z" fill="%s"/>`, color)
+	content := fmt.Sprintf(`<path d="M 5 1 L 9 5 L 5 9 L 1 5 Z" fill="%s"/>`, escapeAttr(color))
 	return Marker(MarkerDef{
 		ID:           id,
 		ViewBox:      "0 0 10 10",
@@ -153,7 +153,7 @@ func DiamondMarker(id string, color string) string {
 
 // TriangleMarker creates a triangle marker
 func TriangleMarker(id string, color string) string {
-	content := fmt.Sprintf(`<path d="M 5 1 L 9 9 L 1 9 Z" fill="%s"/>`, color)
+	content := fmt.Sprintf(`<path d="M 5 1 L 9 9 L 1 9 Z" fill="%s"/>`, escapeAttr(color))
 	return Marker(MarkerDef{
 		ID:           id,
 		ViewBox:      "0 0 10 10",
@@ -168,7 +168,7 @@ func TriangleMarker(id string, color string) string {
 
 // CrossMarker creates a cross/plus marker
 func CrossMarker(id string, color string, strokeWidth float64) string {
-	content := fmt.Sprintf(`<path d="M 5 1 L 5 9 M 1 5 L 9 5" stroke="%s" stroke-width="%.1f" stroke-linecap="round"/>`, color, strokeWidth)
+	content := fmt.Sprintf(`<path d="M 5 1 L 5 9 M 1 5 L 9 5" stroke="%s" stroke-width="%.1f" stroke-linecap="round"/>`, escapeAttr(color), strokeWidth)
 	return Marker(MarkerDef{
 		ID:           id,
 		ViewBox:      "0 0 10 10",
@@ -183,7 +183,7 @@ func CrossMarker(id string, color string, strokeWidth float64) string {
 
 // XMarker creates an X marker
 func XMarker(id string, color string, strokeWidth float64) string {
-	content := fmt.Sprintf(`<path d="M 2 2 L 8 8 M 8 2 L 2 8" stroke="%s" stroke-width="%.1f" stroke-linecap="round"/>`, color, strokeWidth)
+	content := fmt.Sprintf(`<path d="M 2 2 L 8 8 M 8 2 L 2 8" stroke="%s" stroke-width="%.1f" stroke-linecap="round"/>`, escapeAttr(color), strokeWidth)
 	return Marker(MarkerDef{
 		ID:           id,
 		ViewBox:      "0 0 10 10",
@@ -198,7 +198,7 @@ func XMarker(id string, color string, strokeWidth float64) string {
 
 // DotMarker creates a small dot marker (good for data points)
 func DotMarker(id string, color string, radius float64) string {
-	content := fmt.Sprintf(`<circle cx="5" cy="5" r="%.1f" fill="%s"/>`, radius, color)
+	content := fmt.Sprintf(`<circle cx="5" cy="5" r="%.1f" fill="%s"/>`, radius, escapeAttr(color))
 	return Marker(MarkerDef{
 		ID:           id,
 		ViewBox:      "0 0 10 10",
@@ -215,13 +215,13 @@ func DotMarker(id string, color string, radius float64) string {
 func applyMarkers(style Style, markerStart, markerMid, markerEnd string) string {
 	attrs := formatStyle(style)
 	if markerStart != "" {
-		attrs += fmt.Sprintf(` marker-start="%s"`, markerStart)
+		attrs += fmt.Sprintf(` marker-start="%s"`, escapeAttr(markerStart))
 	}
 	if markerMid != "" {
-		attrs += fmt.Sprintf(` marker-mid="%s"`, markerMid)
+		attrs += fmt.Sprintf(` marker-mid="%s"`, escapeAttr(markerMid))
 	}
 	if markerEnd != "" {
-		attrs += fmt.Sprintf(` marker-end="%s"`, markerEnd)
+		attrs += fmt.Sprintf(` marker-end="%s"`, escapeAttr(markerEnd))
 	}
 	return attrs
 }
@@ -229,7 +229,7 @@ func applyMarkers(style Style, markerStart, markerMid, markerEnd string) string 
 // PathWithMarkers renders a path with marker references
 func PathWithMarkers(d string, style Style, markerStart, markerMid, markerEnd string) string {
 	attrs := applyMarkers(style, markerStart, markerMid, markerEnd)
-	return fmt.Sprintf(`<path d="%s"%s/>`, d, attrs)
+	return fmt.Sprintf(`<path d="%s"%s/>`, escapeAttr(d), attrs)
 }
 
 // LineWithMarkers renders a line with marker references

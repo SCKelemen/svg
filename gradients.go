@@ -9,16 +9,17 @@ import (
 
 // GradientStop represents a color stop in a gradient
 type GradientStop struct {
-	Offset  string // percentage or decimal (e.g., "0%", "50%", "1.0")
-	Color   string // color value (hex, rgb, etc.)
-	Opacity float64
+	Offset     string // percentage or decimal (e.g., "0%", "50%", "1.0")
+	Color      string // color value (hex, rgb, etc.)
+	Opacity    float64
+	OpacitySet bool // Emit stop-opacity even when value is 0 or 1
 }
 
 // GradientUnits defines the coordinate system for gradients
 type GradientUnits string
 
 const (
-	GradientUnitsUserSpaceOnUse GradientUnits = "userSpaceOnUse"
+	GradientUnitsUserSpaceOnUse    GradientUnits = "userSpaceOnUse"
 	GradientUnitsObjectBoundingBox GradientUnits = "objectBoundingBox"
 )
 
@@ -57,25 +58,25 @@ type RadialGradientDef struct {
 func LinearGradient(def LinearGradientDef) string {
 	var b strings.Builder
 
-	b.WriteString(fmt.Sprintf(`<linearGradient id="%s"`, def.ID))
+	b.WriteString(fmt.Sprintf(`<linearGradient id="%s"`, escapeAttr(def.ID)))
 
 	if def.X1 != "" {
-		b.WriteString(fmt.Sprintf(` x1="%s"`, def.X1))
+		b.WriteString(fmt.Sprintf(` x1="%s"`, escapeAttr(def.X1)))
 	}
 	if def.Y1 != "" {
-		b.WriteString(fmt.Sprintf(` y1="%s"`, def.Y1))
+		b.WriteString(fmt.Sprintf(` y1="%s"`, escapeAttr(def.Y1)))
 	}
 	if def.X2 != "" {
-		b.WriteString(fmt.Sprintf(` x2="%s"`, def.X2))
+		b.WriteString(fmt.Sprintf(` x2="%s"`, escapeAttr(def.X2)))
 	}
 	if def.Y2 != "" {
-		b.WriteString(fmt.Sprintf(` y2="%s"`, def.Y2))
+		b.WriteString(fmt.Sprintf(` y2="%s"`, escapeAttr(def.Y2)))
 	}
 	if def.Units != "" {
-		b.WriteString(fmt.Sprintf(` gradientUnits="%s"`, string(def.Units)))
+		b.WriteString(fmt.Sprintf(` gradientUnits="%s"`, escapeAttr(string(def.Units))))
 	}
 	if def.SpreadMethod != "" {
-		b.WriteString(fmt.Sprintf(` spreadMethod="%s"`, string(def.SpreadMethod)))
+		b.WriteString(fmt.Sprintf(` spreadMethod="%s"`, escapeAttr(string(def.SpreadMethod))))
 	}
 
 	b.WriteString(">")
@@ -83,8 +84,10 @@ func LinearGradient(def LinearGradientDef) string {
 
 	// Add gradient stops
 	for _, stop := range def.Stops {
-		b.WriteString(fmt.Sprintf(`  <stop offset="%s" stop-color="%s"`, stop.Offset, stop.Color))
-		if stop.Opacity > 0 && stop.Opacity < 1 {
+		b.WriteString(fmt.Sprintf(`  <stop offset="%s" stop-color="%s"`, escapeAttr(stop.Offset), escapeAttr(stop.Color)))
+		if stop.OpacitySet {
+			b.WriteString(fmt.Sprintf(` stop-opacity="%.2f"`, clamp01(stop.Opacity)))
+		} else if stop.Opacity > 0 && stop.Opacity < 1 {
 			b.WriteString(fmt.Sprintf(` stop-opacity="%.2f"`, stop.Opacity))
 		}
 		b.WriteString(`/>`)
@@ -99,31 +102,31 @@ func LinearGradient(def LinearGradientDef) string {
 func RadialGradient(def RadialGradientDef) string {
 	var b strings.Builder
 
-	b.WriteString(fmt.Sprintf(`<radialGradient id="%s"`, def.ID))
+	b.WriteString(fmt.Sprintf(`<radialGradient id="%s"`, escapeAttr(def.ID)))
 
 	if def.CX != "" {
-		b.WriteString(fmt.Sprintf(` cx="%s"`, def.CX))
+		b.WriteString(fmt.Sprintf(` cx="%s"`, escapeAttr(def.CX)))
 	}
 	if def.CY != "" {
-		b.WriteString(fmt.Sprintf(` cy="%s"`, def.CY))
+		b.WriteString(fmt.Sprintf(` cy="%s"`, escapeAttr(def.CY)))
 	}
 	if def.R != "" {
-		b.WriteString(fmt.Sprintf(` r="%s"`, def.R))
+		b.WriteString(fmt.Sprintf(` r="%s"`, escapeAttr(def.R)))
 	}
 	if def.FX != "" {
-		b.WriteString(fmt.Sprintf(` fx="%s"`, def.FX))
+		b.WriteString(fmt.Sprintf(` fx="%s"`, escapeAttr(def.FX)))
 	}
 	if def.FY != "" {
-		b.WriteString(fmt.Sprintf(` fy="%s"`, def.FY))
+		b.WriteString(fmt.Sprintf(` fy="%s"`, escapeAttr(def.FY)))
 	}
 	if def.FR != "" {
-		b.WriteString(fmt.Sprintf(` fr="%s"`, def.FR))
+		b.WriteString(fmt.Sprintf(` fr="%s"`, escapeAttr(def.FR)))
 	}
 	if def.Units != "" {
-		b.WriteString(fmt.Sprintf(` gradientUnits="%s"`, string(def.Units)))
+		b.WriteString(fmt.Sprintf(` gradientUnits="%s"`, escapeAttr(string(def.Units))))
 	}
 	if def.SpreadMethod != "" {
-		b.WriteString(fmt.Sprintf(` spreadMethod="%s"`, string(def.SpreadMethod)))
+		b.WriteString(fmt.Sprintf(` spreadMethod="%s"`, escapeAttr(string(def.SpreadMethod))))
 	}
 
 	b.WriteString(">")
@@ -131,8 +134,10 @@ func RadialGradient(def RadialGradientDef) string {
 
 	// Add gradient stops
 	for _, stop := range def.Stops {
-		b.WriteString(fmt.Sprintf(`  <stop offset="%s" stop-color="%s"`, stop.Offset, stop.Color))
-		if stop.Opacity > 0 && stop.Opacity < 1 {
+		b.WriteString(fmt.Sprintf(`  <stop offset="%s" stop-color="%s"`, escapeAttr(stop.Offset), escapeAttr(stop.Color)))
+		if stop.OpacitySet {
+			b.WriteString(fmt.Sprintf(` stop-opacity="%.2f"`, clamp01(stop.Opacity)))
+		} else if stop.Opacity > 0 && stop.Opacity < 1 {
 			b.WriteString(fmt.Sprintf(` stop-opacity="%.2f"`, stop.Opacity))
 		}
 		b.WriteString(`/>`)

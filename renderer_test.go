@@ -213,3 +213,23 @@ func TestXMLEscape(t *testing.T) {
 		}
 	}
 }
+
+func TestRenderToSVG_EscapesRootAttributes(t *testing.T) {
+	root := &layout.Node{
+		Rect: layout.Rect{X: 0, Y: 0, Width: 10, Height: 10},
+	}
+
+	opts := DefaultOptions()
+	opts.Width = 100
+	opts.Height = 100
+	opts.ViewBox = `0 0 100 100" onload="alert(1)`
+	opts.BackgroundColor = `#fff" onclick="evil()`
+
+	output := RenderToSVG(root, opts)
+	if strings.Contains(output, `" onload="`) {
+		t.Fatalf("expected viewBox attribute to be escaped, got: %s", output)
+	}
+	if strings.Contains(output, `" onclick="`) {
+		t.Fatalf("expected background fill attribute to be escaped, got: %s", output)
+	}
+}

@@ -54,7 +54,7 @@ func (r *Renderer) Render(root *layout.Node) string {
 	if viewBox == "" {
 		viewBox = fmt.Sprintf("0 0 %.0f %.0f", r.options.Width, r.options.Height)
 	}
-	r.builder.WriteString(fmt.Sprintf(` viewBox="%s"`, viewBox))
+	r.builder.WriteString(fmt.Sprintf(` viewBox="%s"`, escapeAttr(viewBox)))
 
 	// Namespace
 	if r.options.Namespace {
@@ -63,7 +63,7 @@ func (r *Renderer) Render(root *layout.Node) string {
 
 	// PreserveAspectRatio
 	if r.options.PreserveAspectRatio != "" {
-		r.builder.WriteString(fmt.Sprintf(` preserveAspectRatio="%s"`, r.options.PreserveAspectRatio))
+		r.builder.WriteString(fmt.Sprintf(` preserveAspectRatio="%s"`, escapeAttr(r.options.PreserveAspectRatio)))
 	}
 
 	r.builder.WriteString(">")
@@ -94,7 +94,7 @@ func (r *Renderer) Render(root *layout.Node) string {
 	// Background
 	if r.options.BackgroundColor != "" {
 		r.builder.WriteString(fmt.Sprintf(`<rect width="%.0f" height="%.0f" fill="%s"/>`,
-			r.options.Width, r.options.Height, r.options.BackgroundColor))
+			r.options.Width, r.options.Height, escapeAttr(r.options.BackgroundColor)))
 		r.builder.WriteString("\n")
 	}
 
@@ -138,7 +138,7 @@ func (r *Renderer) renderNode(node *layout.Node, depth int) string {
 
 	if hasTransform || hasChildren {
 		if hasTransform {
-			b.WriteString(fmt.Sprintf(`<g transform="%s">`, transform))
+			b.WriteString(fmt.Sprintf(`<g transform="%s">`, escapeAttr(transform)))
 		} else {
 			b.WriteString("<g>")
 		}
@@ -218,7 +218,7 @@ func RenderNodes(nodes []*layout.Node, opts Options) string {
 	// Background
 	if opts.BackgroundColor != "" {
 		b.WriteString(fmt.Sprintf(`<rect width="%.0f" height="%.0f" fill="%s"/>`,
-			opts.Width, opts.Height, opts.BackgroundColor))
+			opts.Width, opts.Height, escapeAttr(opts.BackgroundColor)))
 		b.WriteString("\n")
 	}
 

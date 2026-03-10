@@ -3,12 +3,14 @@ package svg
 import (
 	"bytes"
 	"encoding/xml"
+	"errors"
 	"fmt"
 	"image"
 	"image/color"
 	"image/draw"
 	"image/jpeg"
 	"image/png"
+	"io"
 	"math"
 	"strconv"
 	"strings"
@@ -61,7 +63,7 @@ func Export(svgData string, opts ExportOptions) ([]byte, error) {
 type svgElement struct {
 	Tag        string
 	Attributes map[string]string
-	Children   []svgElement
+	Children   []*svgElement
 	Text       string
 }
 
@@ -75,7 +77,10 @@ func parseSVG(svgData string) (*svgElement, error) {
 	for {
 		token, err := decoder.Token()
 		if err != nil {
-			break
+			if errors.Is(err, io.EOF) {
+				break
+			}
+			return nil, fmt.Errorf("SVG parse error: %w", err)
 		}
 
 		switch t := token.(type) {
@@ -91,7 +96,7 @@ func parseSVG(svgData string) (*svgElement, error) {
 
 			if len(stack) > 0 {
 				parent := stack[len(stack)-1]
-				parent.Children = append(parent.Children, *elem)
+				parent.Children = append(parent.Children, elem)
 			} else {
 				root = elem
 			}
@@ -197,7 +202,7 @@ func getSVGDimensions(root *svgElement, opts ExportOptions) (int, int, error) {
 	}
 
 	// Try viewBox if dimensions not set
-	if (width == 0 || height == 0) {
+	if width == 0 || height == 0 {
 		if viewBox, ok := root.Attributes["viewBox"]; ok {
 			parts := strings.Fields(viewBox)
 			if len(parts) == 4 {
@@ -224,12 +229,17 @@ func getSVGDimensions(root *svgElement, opts ExportOptions) (int, int, error) {
 
 // parseLength parses a length string (handles px, no unit)
 func parseLength(s string) int {
+	return int(parseLengthFloat(s))
+}
+
+// parseLengthFloat parses a length string and returns a float64.
+func parseLengthFloat(s string) float64 {
 	s = strings.TrimSpace(s)
 	s = strings.TrimSuffix(s, "px")
 	s = strings.TrimSuffix(s, "pt")
 
 	if val, err := strconv.ParseFloat(s, 64); err == nil {
-		return int(val)
+		return val
 	}
 
 	return 0
@@ -241,7 +251,7 @@ func renderElement(elem *svgElement, img *image.RGBA, rasterizer *vector.Rasteri
 	case "svg":
 		// Render children
 		for _, child := range elem.Children {
-			if err := renderElement(&child, img, rasterizer, width, height); err != nil {
+			if err := renderElement(child, img, rasterizer, width, height); err != nil {
 				return err
 			}
 		}
@@ -253,12 +263,12 @@ func renderElement(elem *svgElement, img *image.RGBA, rasterizer *vector.Rasteri
 		return renderCircle(elem, img, rasterizer)
 
 	case "line":
-		return renderLine(elem, img, rasterizer)
+		return renderLine(elem, img)
 
 	case "g":
 		// Group - render children
 		for _, child := range elem.Children {
-			if err := renderElement(&child, img, rasterizer, width, height); err != nil {
+			if err := renderElement(child, img, rasterizer, width, height); err != nil {
 				return err
 			}
 		}
@@ -275,7 +285,7 @@ func renderElement(elem *svgElement, img *image.RGBA, rasterizer *vector.Rasteri
 	default:
 		// Unknown or unsupported element, continue rendering children
 		for _, child := range elem.Children {
-			if err := renderElement(&child, img, rasterizer, width, height); err != nil {
+			if err := renderElement(child, img, rasterizer, width, height); err != nil {
 				return err
 			}
 		}
@@ -323,27 +333,66 @@ func renderCircle(elem *svgElement, img *image.RGBA, rasterizer *vector.Rasteriz
 }
 
 // renderLine renders a line
-func renderLine(elem *svgElement, img *image.RGBA, rasterizer *vector.Rasterizer) error {
-	x1 := parseLength(elem.Attributes["x1"])
-	y1 := parseLength(elem.Attributes["y1"])
-	x2 := parseLength(elem.Attributes["x2"])
-	y2 := parseLength(elem.Attributes["y2"])
+func renderLine(elem *svgElement, img *image.RGBA) error {
+	x1 := parseLengthFloat(elem.Attributes["x1"])
+	y1 := parseLengthFloat(elem.Attributes["y1"])
+	x2 := parseLengthFloat(elem.Attributes["x2"])
+	y2 := parseLengthFloat(elem.Attributes["y2"])
 
 	strokeColor := parseColor(elem.Attributes["stroke"])
+	strokeWidth := parseLengthFloat(elem.Attributes["stroke-width"])
+	if strokeWidth <= 0 {
+		strokeWidth = 1
+	}
+	if isTransparent(strokeColor) {
+		return nil
+	}
 
-	// Use vector rasterizer for antialiased lines
-	rasterizer.Reset(img.Bounds().Dx(), img.Bounds().Dy())
-	rasterizer.DrawOp = draw.Over
-
-	// Draw line
-	rasterizer.MoveTo(float32(x1), float32(y1))
-	rasterizer.LineTo(float32(x2), float32(y2))
-
-	// Rasterize with stroke
-	src := image.NewUniform(strokeColor)
-	rasterizer.Draw(img, img.Bounds(), src, image.Point{})
+	drawThickLine(img, x1, y1, x2, y2, strokeWidth, strokeColor)
 
 	return nil
+}
+
+func isTransparent(c color.Color) bool {
+	_, _, _, a := c.RGBA()
+	return a == 0
+}
+
+func drawThickLine(img *image.RGBA, x1, y1, x2, y2, width float64, c color.Color) {
+	dx := x2 - x1
+	dy := y2 - y1
+	steps := int(math.Max(math.Abs(dx), math.Abs(dy)))
+
+	brush := int(math.Round(width))
+	if brush < 1 {
+		brush = 1
+	}
+	half := brush / 2
+
+	if steps == 0 {
+		drawBrush(img, int(math.Round(x1)), int(math.Round(y1)), brush, half, c)
+		return
+	}
+
+	for i := 0; i <= steps; i++ {
+		t := float64(i) / float64(steps)
+		x := x1 + dx*t
+		y := y1 + dy*t
+		drawBrush(img, int(math.Round(x)), int(math.Round(y)), brush, half, c)
+	}
+}
+
+func drawBrush(img *image.RGBA, cx, cy, brush, half int, c color.Color) {
+	for oy := -half; oy < brush-half; oy++ {
+		for ox := -half; ox < brush-half; ox++ {
+			x := cx + ox
+			y := cy + oy
+			if !image.Pt(x, y).In(img.Bounds()) {
+				continue
+			}
+			draw.Draw(img, image.Rect(x, y, x+1, y+1), &image.Uniform{C: c}, image.Point{}, draw.Over)
+		}
+	}
 }
 
 // parseColor parses a color string (hex or named)
