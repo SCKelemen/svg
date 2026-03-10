@@ -92,6 +92,9 @@ type Style struct {
 	StrokeOpacitySet bool // Emit stroke-opacity attribute even when value is 0 or 1
 	Class            string
 	ClipPath         string
+	MarkerStart      string
+	MarkerMid        string
+	MarkerEnd        string
 	TextAnchor       TextAnchor
 	DominantBaseline DominantBaseline
 	FontFamily       string
@@ -278,6 +281,15 @@ func formatStyle(s Style) string {
 	}
 	if s.ClipPath != "" {
 		attrs = append(attrs, fmt.Sprintf(`clip-path="%s"`, escapeAttr(s.ClipPath)))
+	}
+	if s.MarkerStart != "" {
+		attrs = append(attrs, fmt.Sprintf(`marker-start="%s"`, escapeAttr(s.MarkerStart)))
+	}
+	if s.MarkerMid != "" {
+		attrs = append(attrs, fmt.Sprintf(`marker-mid="%s"`, escapeAttr(s.MarkerMid)))
+	}
+	if s.MarkerEnd != "" {
+		attrs = append(attrs, fmt.Sprintf(`marker-end="%s"`, escapeAttr(s.MarkerEnd)))
 	}
 	if s.TextAnchor != "" {
 		attrs = append(attrs, fmt.Sprintf(`text-anchor="%s"`, escapeAttr(string(s.TextAnchor))))

@@ -350,6 +350,28 @@ func TestMarkerUnits(t *testing.T) {
 	}
 }
 
+func TestStyleWithMarkers(t *testing.T) {
+	style := StyleWithMarkers(Style{
+		Stroke:      "#000000",
+		StrokeWidth: 2,
+	}, MarkerStyle{
+		MarkerStart: "url(#start)",
+		MarkerMid:   "url(#mid)",
+		MarkerEnd:   "url(#end)",
+	})
+
+	line := Line(0, 0, 10, 10, style)
+	if !strings.Contains(line, `marker-start="url(#start)"`) {
+		t.Fatalf("expected marker-start in output: %s", line)
+	}
+	if !strings.Contains(line, `marker-mid="url(#mid)"`) {
+		t.Fatalf("expected marker-mid in output: %s", line)
+	}
+	if !strings.Contains(line, `marker-end="url(#end)"`) {
+		t.Fatalf("expected marker-end in output: %s", line)
+	}
+}
+
 func BenchmarkArrowMarker(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		_ = ArrowMarker("arrow", "#FF0000")

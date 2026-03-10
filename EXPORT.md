@@ -7,6 +7,7 @@ The svg library now includes native export functionality to convert SVG to raste
 - **No external dependencies**: Uses only `golang.org/x/image` and standard library
 - **Multiple formats**: SVG (passthrough), PNG, and JPEG
 - **Configurable**: Width, height, quality, and DPI settings
+- **DPI-aware units**: Supports physical SVG units (`in`, `cm`, `mm`, `pt`, `pc`, `q`)
 - **Basic shape support**: Rectangles, circles, and lines with fill and stroke colors
 
 ## Usage
@@ -114,10 +115,11 @@ The export system consists of three main components:
 
 ### Rendering Strategy
 
-- White background fill by default
+- PNG exports preserve transparency by default
+- JPEG exports use a white background
 - Antialiased circles using 32-segment approximation
 - Rectangles rendered directly to image
-- Lines use vector rasterizer for smooth antialiasing
+- Lines use a width-aware pixel brush stroke renderer
 
 ## Limitations
 

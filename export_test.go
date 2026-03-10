@@ -3,11 +3,12 @@ package svg
 import (
 	"bytes"
 	"image/png"
+	"math"
 	"strings"
 	"testing"
 )
 
-func countNonWhitePixelsFromPNG(t *testing.T, pngData []byte) int {
+func countVisiblePixelsFromPNG(t *testing.T, pngData []byte) int {
 	t.Helper()
 
 	img, err := png.Decode(bytes.NewReader(pngData))
@@ -19,8 +20,8 @@ func countNonWhitePixelsFromPNG(t *testing.T, pngData []byte) int {
 	count := 0
 	for y := b.Min.Y; y < b.Max.Y; y++ {
 		for x := b.Min.X; x < b.Max.X; x++ {
-			r, g, b, a := img.At(x, y).RGBA()
-			if !(r == 0xffff && g == 0xffff && b == 0xffff && a == 0xffff) {
+			_, _, _, a := img.At(x, y).RGBA()
+			if a != 0 {
 				count++
 			}
 		}
@@ -116,8 +117,8 @@ func TestExportGroupedElements(t *testing.T) {
 		t.Fatalf("grouped export failed: %v", err)
 	}
 
-	nonWhite := countNonWhitePixelsFromPNG(t, result)
-	if nonWhite == 0 {
+	nonTransparent := countVisiblePixelsFromPNG(t, result)
+	if nonTransparent == 0 {
 		t.Fatal("expected grouped content to render, got fully white image")
 	}
 }
@@ -149,13 +150,80 @@ func TestExportLineDoesNotFloodCanvas(t *testing.T) {
 		t.Fatalf("line export failed: %v", err)
 	}
 
-	nonWhite := countNonWhitePixelsFromPNG(t, result)
-	if nonWhite == 0 {
+	nonTransparent := countVisiblePixelsFromPNG(t, result)
+	if nonTransparent == 0 {
 		t.Fatal("expected line to render, got fully white image")
 	}
 	// A 1px diagonal line in 100x100 should not fill most of the canvas.
-	if nonWhite > 1000 {
-		t.Fatalf("expected line rendering to stay narrow, got %d non-white pixels", nonWhite)
+	if nonTransparent > 1000 {
+		t.Fatalf("expected line rendering to stay narrow, got %d non-transparent pixels", nonTransparent)
+	}
+}
+
+func TestExportPNGPreservesTransparencyByDefault(t *testing.T) {
+	svgData := `<svg width="10" height="10"></svg>`
+
+	result, err := Export(svgData, ExportOptions{
+		Format: FormatPNG,
+		Width:  10,
+		Height: 10,
+	})
+	if err != nil {
+		t.Fatalf("PNG export failed: %v", err)
+	}
+
+	img, err := png.Decode(bytes.NewReader(result))
+	if err != nil {
+		t.Fatalf("failed to decode PNG: %v", err)
+	}
+
+	_, _, _, a := img.At(0, 0).RGBA()
+	if a != 0 {
+		t.Fatalf("expected transparent background for PNG, got alpha=%d", a)
+	}
+}
+
+func TestExportDPIAffectsPhysicalUnits(t *testing.T) {
+	svgData := `<svg width="1in" height="1in"></svg>`
+
+	result, err := Export(svgData, ExportOptions{
+		Format: FormatPNG,
+		DPI:    192,
+	})
+	if err != nil {
+		t.Fatalf("export failed: %v", err)
+	}
+
+	cfg, err := png.DecodeConfig(bytes.NewReader(result))
+	if err != nil {
+		t.Fatalf("failed to decode PNG config: %v", err)
+	}
+	if cfg.Width != 192 || cfg.Height != 192 {
+		t.Fatalf("expected 192x192 at 192 DPI, got %dx%d", cfg.Width, cfg.Height)
+	}
+}
+
+func TestParseLengthFloatSupportsUnits(t *testing.T) {
+	const dpi = 96.0
+
+	tests := []struct {
+		input    string
+		expected float64
+	}{
+		{"10.5", 10.5},
+		{"1in", 96},
+		{"2.54cm", 96},
+		{"25.4mm", 96},
+		{"72pt", 96},
+		{"6pc", 96},
+		{"400q", 96 / 101.6 * 400},
+	}
+
+	for _, tt := range tests {
+		got := parseLengthFloat(tt.input, dpi)
+		if math.Abs(got-tt.expected) > 0.001 {
+			t.Fatalf("parseLengthFloat(%q) = %f, expected %f", tt.input, got, tt.expected)
+		}
 	}
 }
 

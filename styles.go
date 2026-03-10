@@ -1,6 +1,9 @@
 package svg
 
-import "strings"
+import (
+	"sort"
+	"strings"
+)
 
 // StyleSheet represents a collection of CSS styles for SVG rendering
 type StyleSheet struct {
@@ -81,7 +84,14 @@ func (ss *StyleSheet) ToSVG() string {
 		b.WriteString(rule.Selector)
 		b.WriteString(" {")
 
-		for prop, value := range rule.Properties {
+		props := make([]string, 0, len(rule.Properties))
+		for prop := range rule.Properties {
+			props = append(props, prop)
+		}
+		sort.Strings(props)
+
+		for _, prop := range props {
+			value := rule.Properties[prop]
 			b.WriteString("\n        ")
 			b.WriteString(prop)
 			b.WriteString(": ")

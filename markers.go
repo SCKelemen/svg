@@ -84,8 +84,9 @@ type MarkerStyle struct {
 
 // StyleWithMarkers extends a Style with marker references
 func StyleWithMarkers(style Style, markers MarkerStyle) Style {
-	// Note: Markers need to be added via a custom attribute since they're not in the base Style struct
-	// This is a helper to document the pattern
+	style.MarkerStart = markers.MarkerStart
+	style.MarkerMid = markers.MarkerMid
+	style.MarkerEnd = markers.MarkerEnd
 	return style
 }
 
@@ -213,17 +214,16 @@ func DotMarker(id string, color string, radius float64) string {
 
 // Helper to apply markers to path style attributes
 func applyMarkers(style Style, markerStart, markerMid, markerEnd string) string {
-	attrs := formatStyle(style)
 	if markerStart != "" {
-		attrs += fmt.Sprintf(` marker-start="%s"`, escapeAttr(markerStart))
+		style.MarkerStart = markerStart
 	}
 	if markerMid != "" {
-		attrs += fmt.Sprintf(` marker-mid="%s"`, escapeAttr(markerMid))
+		style.MarkerMid = markerMid
 	}
 	if markerEnd != "" {
-		attrs += fmt.Sprintf(` marker-end="%s"`, escapeAttr(markerEnd))
+		style.MarkerEnd = markerEnd
 	}
-	return attrs
+	return formatStyle(style)
 }
 
 // PathWithMarkers renders a path with marker references
