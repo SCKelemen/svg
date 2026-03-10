@@ -233,3 +233,42 @@ func TestRenderToSVG_EscapesRootAttributes(t *testing.T) {
 		t.Fatalf("expected background fill attribute to be escaped, got: %s", output)
 	}
 }
+
+func TestRenderToSVG_WithTypedStyleNodeFunc(t *testing.T) {
+	root := &layout.Node{
+		Rect: layout.Rect{X: 0, Y: 0, Width: 20, Height: 20},
+	}
+
+	opts := DefaultOptions()
+	opts.Width = 20
+	opts.Height = 20
+	opts.StyleNodeFunc = func(node *layout.Node, depth int) Style {
+		return Style{Fill: "#123456"}
+	}
+
+	out := RenderToSVG(root, opts)
+	if !strings.Contains(out, `fill="#123456"`) {
+		t.Fatalf("expected typed style func to apply fill, got: %s", out)
+	}
+}
+
+func TestRenderToSVG_WithTypedRenderNodeFunc(t *testing.T) {
+	root := &layout.Node{
+		Rect: layout.Rect{X: 0, Y: 0, Width: 20, Height: 20},
+	}
+
+	opts := DefaultOptions()
+	opts.Width = 20
+	opts.Height = 20
+	opts.RenderNodeFunc = func(node *layout.Node, depth int) string {
+		return `<circle cx="10" cy="10" r="5" fill="#ff0000"/>`
+	}
+
+	out := RenderToSVG(root, opts)
+	if !strings.Contains(out, `<circle cx="10" cy="10" r="5" fill="#ff0000"/>`) {
+		t.Fatalf("expected typed render func output, got: %s", out)
+	}
+	if strings.Contains(out, "<rect") {
+		t.Fatalf("expected default rect rendering to be bypassed, got: %s", out)
+	}
+}

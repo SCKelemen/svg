@@ -8,6 +8,7 @@ The svg library now includes native export functionality to convert SVG to raste
 - **Multiple formats**: SVG (passthrough), PNG, and JPEG
 - **Configurable**: Width, height, quality, and DPI settings
 - **DPI-aware units**: Supports physical SVG units (`in`, `cm`, `mm`, `pt`, `pc`, `q`)
+- **Safe unsupported handling**: Returns an error for unsupported renderable elements by default (configurable)
 - **Basic shape support**: Rectangles, circles, and lines with fill and stroke colors
 
 ## Usage
@@ -59,6 +60,12 @@ opts := svg.ExportOptions{
     Width:   800,
     Height:  600,
     Quality: 90, // 0-100, default 90
+}
+
+// Ignore unsupported renderable elements (e.g. <text>, <path>) instead of failing
+opts := svg.ExportOptions{
+    Format:            svg.FormatPNG,
+    IgnoreUnsupported: true,
 }
 ```
 

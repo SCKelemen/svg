@@ -1,5 +1,7 @@
 package svg
 
+import "github.com/SCKelemen/layout"
+
 // Options configures SVG rendering behavior
 type Options struct {
 	// Width of the output SVG
@@ -30,10 +32,16 @@ type Options struct {
 	// StyleFunc allows custom styling per node
 	// Called for each node with the node and its depth in the tree
 	StyleFunc func(node interface{}, depth int) Style
+	// StyleNodeFunc is the typed variant of StyleFunc.
+	// If both are set, StyleNodeFunc takes precedence.
+	StyleNodeFunc func(node *layout.Node, depth int) Style
 
 	// RenderFunc allows custom rendering per node type
 	// If it returns non-empty string, that's used instead of default rendering
 	RenderFunc func(node interface{}, depth int) string
+	// RenderNodeFunc is the typed variant of RenderFunc.
+	// If both are set, RenderNodeFunc takes precedence.
+	RenderNodeFunc func(node *layout.Node, depth int) string
 }
 
 // DefaultOptions returns sensible default options

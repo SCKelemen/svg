@@ -3,6 +3,7 @@ package svg
 import (
 	"sort"
 	"strings"
+	"unicode"
 )
 
 // StyleSheet represents a collection of CSS styles for SVG rendering
@@ -80,8 +81,13 @@ func (ss *StyleSheet) ToSVG() string {
 	b.WriteString("<style>")
 
 	for _, rule := range ss.Rules {
+		selector := strings.TrimSpace(rule.Selector)
+		if selector == "" {
+			continue
+		}
+
 		b.WriteString("\n    ")
-		b.WriteString(rule.Selector)
+		b.WriteString(escapeXML(selector))
 		b.WriteString(" {")
 
 		props := make([]string, 0, len(rule.Properties))
@@ -91,11 +97,14 @@ func (ss *StyleSheet) ToSVG() string {
 		sort.Strings(props)
 
 		for _, prop := range props {
+			if !isValidCSSPropertyName(prop) {
+				continue
+			}
 			value := rule.Properties[prop]
 			b.WriteString("\n        ")
-			b.WriteString(prop)
+			b.WriteString(escapeXML(prop))
 			b.WriteString(": ")
-			b.WriteString(value)
+			b.WriteString(escapeXML(value))
 			b.WriteString(";")
 		}
 
@@ -112,4 +121,19 @@ func (ss *StyleSheet) AddRule(selector string, properties map[string]string) {
 		Selector:   selector,
 		Properties: properties,
 	})
+}
+
+func isValidCSSPropertyName(prop string) bool {
+	if prop == "" {
+		return false
+	}
+	for _, r := range prop {
+		if r == '-' {
+			continue
+		}
+		if !unicode.IsLetter(r) && !unicode.IsDigit(r) {
+			return false
+		}
+	}
+	return true
 }

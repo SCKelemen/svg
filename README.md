@@ -195,7 +195,7 @@ go test -cover ./...
 go test -bench=. -benchmem
 ```
 
-Coverage: ~50% of statements with tests for PathBuilder, Markers, and core rendering.
+Coverage: ~60%+ of statements with tests for PathBuilder, markers, rendering, and export.
 
 ## Performance
 

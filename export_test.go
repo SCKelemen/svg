@@ -136,6 +136,48 @@ func TestExportMalformedSVGReturnsError(t *testing.T) {
 	}
 }
 
+func TestExportUnsupportedElementsReturnErrorByDefault(t *testing.T) {
+	svgData := `<svg width="100" height="100"><text x="10" y="20">hello</text></svg>`
+
+	_, err := Export(svgData, ExportOptions{
+		Format: FormatPNG,
+		Width:  100,
+		Height: 100,
+	})
+	if err == nil {
+		t.Fatal("expected unsupported element error")
+	}
+
+	unsupportedErr, ok := err.(*UnsupportedElementsError)
+	if !ok {
+		t.Fatalf("expected UnsupportedElementsError, got %T: %v", err, err)
+	}
+	if len(unsupportedErr.Elements) == 0 || unsupportedErr.Elements[0] != "text" {
+		t.Fatalf("expected text to be reported unsupported, got %#v", unsupportedErr.Elements)
+	}
+}
+
+func TestExportUnsupportedElementsCanBeIgnored(t *testing.T) {
+	svgData := `<svg width="100" height="100">
+		<text x="10" y="20">hello</text>
+		<rect x="0" y="0" width="10" height="10" fill="#ff0000"/>
+	</svg>`
+
+	result, err := Export(svgData, ExportOptions{
+		Format:            FormatPNG,
+		Width:             100,
+		Height:            100,
+		IgnoreUnsupported: true,
+	})
+	if err != nil {
+		t.Fatalf("expected unsupported elements to be ignored, got error: %v", err)
+	}
+
+	if countVisiblePixelsFromPNG(t, result) == 0 {
+		t.Fatal("expected supported content to still render")
+	}
+}
+
 func TestExportLineDoesNotFloodCanvas(t *testing.T) {
 	svgData := `<svg width="100" height="100">
 		<line x1="10" y1="10" x2="90" y2="90" stroke="#ff0000" stroke-width="1"/>
@@ -180,6 +222,30 @@ func TestExportPNGPreservesTransparencyByDefault(t *testing.T) {
 	_, _, _, a := img.At(0, 0).RGBA()
 	if a != 0 {
 		t.Fatalf("expected transparent background for PNG, got alpha=%d", a)
+	}
+}
+
+func TestExportPercentageLengthsRender(t *testing.T) {
+	svgData := `<svg width="200" height="100">
+		<rect x="25%" y="20%" width="50%" height="50%" fill="#ff0000"/>
+	</svg>`
+
+	result, err := Export(svgData, ExportOptions{
+		Format: FormatPNG,
+		Width:  200,
+		Height: 100,
+	})
+	if err != nil {
+		t.Fatalf("export failed: %v", err)
+	}
+
+	visible := countVisiblePixelsFromPNG(t, result)
+	if visible == 0 {
+		t.Fatal("expected percentage-sized rectangle to render")
+	}
+	// Expected area is about 100 * 50 = 5000 px; allow small rasterization variance.
+	if visible < 4500 || visible > 5500 {
+		t.Fatalf("expected visible pixels around 5000, got %d", visible)
 	}
 }
 

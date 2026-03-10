@@ -114,7 +114,11 @@ func (r *Renderer) renderNode(node *layout.Node, depth int) string {
 	}
 
 	// Allow custom rendering
-	if r.options.RenderFunc != nil {
+	if r.options.RenderNodeFunc != nil {
+		if custom := r.options.RenderNodeFunc(node, depth); custom != "" {
+			return custom
+		}
+	} else if r.options.RenderFunc != nil {
 		if custom := r.options.RenderFunc(node, depth); custom != "" {
 			return custom
 		}
@@ -125,7 +129,9 @@ func (r *Renderer) renderNode(node *layout.Node, depth int) string {
 
 	// Get style for this node
 	style := r.defaultStyle
-	if r.options.StyleFunc != nil {
+	if r.options.StyleNodeFunc != nil {
+		style = r.options.StyleNodeFunc(node, depth)
+	} else if r.options.StyleFunc != nil {
 		style = r.options.StyleFunc(node, depth)
 	}
 

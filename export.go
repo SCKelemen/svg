@@ -12,6 +12,7 @@ import (
 	"image/png"
 	"io"
 	"math"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -39,6 +40,48 @@ type ExportOptions struct {
 	Height  int // For raster formats, 0 = use SVG dimensions
 	Quality int // For JPEG, 0-100 (default 90)
 	DPI     int // Dots per inch for physical SVG units like in/cm/mm/pt (default 96)
+	// IgnoreUnsupported skips unsupported renderable SVG elements (e.g. text/path)
+	// instead of returning an error.
+	IgnoreUnsupported bool
+}
+
+// UnsupportedElementsError is returned when raster export encounters elements
+// that this renderer cannot rasterize.
+type UnsupportedElementsError struct {
+	Elements []string
+}
+
+func (e *UnsupportedElementsError) Error() string {
+	return fmt.Sprintf("unsupported SVG elements: %s", strings.Join(e.Elements, ", "))
+}
+
+type rasterRenderState struct {
+	unsupported map[string]struct{}
+}
+
+func newRasterRenderState() *rasterRenderState {
+	return &rasterRenderState{
+		unsupported: make(map[string]struct{}),
+	}
+}
+
+func (s *rasterRenderState) addUnsupported(tag string) {
+	if tag == "" {
+		return
+	}
+	s.unsupported[tag] = struct{}{}
+}
+
+func (s *rasterRenderState) listUnsupported() []string {
+	if len(s.unsupported) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(s.unsupported))
+	for tag := range s.unsupported {
+		out = append(out, tag)
+	}
+	sort.Strings(out)
+	return out
 }
 
 // DefaultExportOptions returns sensible defaults
@@ -153,10 +196,14 @@ func rasterize(svgData string, opts ExportOptions) ([]byte, error) {
 
 	// Create rasterizer
 	rasterizer := vector.NewRasterizer(width, height)
+	state := newRasterRenderState()
 
 	// Render SVG elements
-	if err := renderElement(root, img, rasterizer, width, height, dpi); err != nil {
+	if err := renderElement(root, img, rasterizer, width, height, dpi, state); err != nil {
 		return nil, fmt.Errorf("failed to render SVG: %w", err)
+	}
+	if unsupported := state.listUnsupported(); len(unsupported) > 0 && !opts.IgnoreUnsupported {
+		return nil, &UnsupportedElementsError{Elements: unsupported}
 	}
 
 	// Encode to target format
@@ -193,32 +240,37 @@ func rasterize(svgData string, opts ExportOptions) ([]byte, error) {
 func getSVGDimensions(root *svgElement, opts ExportOptions, dpi float64) (int, int, error) {
 	width := opts.Width
 	height := opts.Height
+	var viewBoxWidth float64
+	var viewBoxHeight float64
+
+	if viewBox, ok := root.Attributes["viewBox"]; ok {
+		parts := strings.Fields(viewBox)
+		if len(parts) == 4 {
+			viewBoxWidth = parseLengthFloat(parts[2], dpi)
+			viewBoxHeight = parseLengthFloat(parts[3], dpi)
+		}
+	}
 
 	// Try to get from attributes
 	if width == 0 {
 		if w, ok := root.Attributes["width"]; ok {
-			width = parseLength(w, dpi)
+			width = parseLength(w, dpi, viewBoxWidth)
 		}
 	}
 
 	if height == 0 {
 		if h, ok := root.Attributes["height"]; ok {
-			height = parseLength(h, dpi)
+			height = parseLength(h, dpi, viewBoxHeight)
 		}
 	}
 
 	// Try viewBox if dimensions not set
 	if width == 0 || height == 0 {
-		if viewBox, ok := root.Attributes["viewBox"]; ok {
-			parts := strings.Fields(viewBox)
-			if len(parts) == 4 {
-				if width == 0 {
-					width = parseLength(parts[2], dpi)
-				}
-				if height == 0 {
-					height = parseLength(parts[3], dpi)
-				}
-			}
+		if width == 0 {
+			width = int(math.Round(viewBoxWidth))
+		}
+		if height == 0 {
+			height = int(math.Round(viewBoxHeight))
 		}
 	}
 
@@ -241,19 +293,32 @@ func resolveDPI(opts ExportOptions) float64 {
 }
 
 // parseLength parses a length string into device pixels.
-func parseLength(s string, dpi float64) int {
-	return int(math.Round(parseLengthFloat(s, dpi)))
+func parseLength(s string, dpi, reference float64) int {
+	return int(math.Round(parseLengthFloatWithReference(s, dpi, reference)))
 }
 
 // parseLengthFloat parses a length string and returns a pixel value.
 func parseLengthFloat(s string, dpi float64) float64 {
+	return parseLengthFloatWithReference(s, dpi, 0)
+}
+
+// parseLengthFloatWithReference parses a length string using the provided
+// reference value for percentage lengths.
+func parseLengthFloatWithReference(s string, dpi, reference float64) float64 {
 	s = strings.ToLower(strings.TrimSpace(s))
 	if s == "" {
 		return 0
 	}
-	// Percentages require viewport/object context and are not currently supported.
 	if strings.HasSuffix(s, "%") {
-		return 0
+		if reference <= 0 {
+			return 0
+		}
+		num := strings.TrimSpace(strings.TrimSuffix(s, "%"))
+		val, err := strconv.ParseFloat(num, 64)
+		if err != nil {
+			return 0
+		}
+		return reference * (val / 100.0)
 	}
 
 	units := []struct {
@@ -287,47 +352,55 @@ func parseLengthFloat(s string, dpi float64) float64 {
 	return 0
 }
 
-// renderElement renders an SVG element to the image
-func renderElement(elem *svgElement, img *image.RGBA, rasterizer *vector.Rasterizer, width, height int, dpi float64) error {
+// renderElement renders an SVG element to the image.
+func renderElement(elem *svgElement, img *image.RGBA, rasterizer *vector.Rasterizer, width, height int, dpi float64, state *rasterRenderState) error {
 	switch elem.Tag {
 	case "svg":
 		// Render children
 		for _, child := range elem.Children {
-			if err := renderElement(child, img, rasterizer, width, height, dpi); err != nil {
+			if err := renderElement(child, img, rasterizer, width, height, dpi, state); err != nil {
 				return err
 			}
 		}
 
 	case "rect":
-		return renderRect(elem, img, rasterizer, dpi)
+		return renderRect(elem, img, rasterizer, width, height, dpi)
 
 	case "circle":
-		return renderCircle(elem, img, rasterizer, dpi)
+		return renderCircle(elem, img, rasterizer, width, height, dpi)
 
 	case "line":
-		return renderLine(elem, img, dpi)
+		return renderLine(elem, img, width, height, dpi)
 
 	case "g":
 		// Group - render children
 		for _, child := range elem.Children {
-			if err := renderElement(child, img, rasterizer, width, height, dpi); err != nil {
+			if err := renderElement(child, img, rasterizer, width, height, dpi, state); err != nil {
 				return err
 			}
 		}
 
+	case "defs", "clipPath":
+		for _, child := range elem.Children {
+			if err := renderElement(child, img, rasterizer, width, height, dpi, state); err != nil {
+				return err
+			}
+		}
+
+	case "style", "linearGradient", "radialGradient", "stop", "title", "desc", "metadata":
+		// Intentionally ignored non-rendering definitions/metadata.
+
 	case "text":
-		// Text rendering is complex and requires font support
-		// For now, we'll skip text elements
-		// TODO: Implement text rendering using golang.org/x/image/font
+		state.addUnsupported("text")
 
 	case "path":
-		// Path rendering is complex
-		// TODO: Implement path rendering
+		state.addUnsupported("path")
 
 	default:
 		// Unknown or unsupported element, continue rendering children
+		state.addUnsupported(elem.Tag)
 		for _, child := range elem.Children {
-			if err := renderElement(child, img, rasterizer, width, height, dpi); err != nil {
+			if err := renderElement(child, img, rasterizer, width, height, dpi, state); err != nil {
 				return err
 			}
 		}
@@ -337,12 +410,12 @@ func renderElement(elem *svgElement, img *image.RGBA, rasterizer *vector.Rasteri
 }
 
 // renderRect renders a rectangle
-func renderRect(elem *svgElement, img *image.RGBA, rasterizer *vector.Rasterizer, dpi float64) error {
+func renderRect(elem *svgElement, img *image.RGBA, rasterizer *vector.Rasterizer, width, height int, dpi float64) error {
 	_ = rasterizer
-	x := parseLengthFloat(elem.Attributes["x"], dpi)
-	y := parseLengthFloat(elem.Attributes["y"], dpi)
-	w := parseLengthFloat(elem.Attributes["width"], dpi)
-	h := parseLengthFloat(elem.Attributes["height"], dpi)
+	x := parseLengthFloatWithReference(elem.Attributes["x"], dpi, float64(width))
+	y := parseLengthFloatWithReference(elem.Attributes["y"], dpi, float64(height))
+	w := parseLengthFloatWithReference(elem.Attributes["width"], dpi, float64(width))
+	h := parseLengthFloatWithReference(elem.Attributes["height"], dpi, float64(height))
 
 	fillColor := parseColor(elem.Attributes["fill"])
 	if isTransparent(fillColor) || w <= 0 || h <= 0 {
@@ -362,10 +435,10 @@ func renderRect(elem *svgElement, img *image.RGBA, rasterizer *vector.Rasterizer
 }
 
 // renderCircle renders a circle
-func renderCircle(elem *svgElement, img *image.RGBA, rasterizer *vector.Rasterizer, dpi float64) error {
-	cx := parseLengthFloat(elem.Attributes["cx"], dpi)
-	cy := parseLengthFloat(elem.Attributes["cy"], dpi)
-	r := parseLengthFloat(elem.Attributes["r"], dpi)
+func renderCircle(elem *svgElement, img *image.RGBA, rasterizer *vector.Rasterizer, width, height int, dpi float64) error {
+	cx := parseLengthFloatWithReference(elem.Attributes["cx"], dpi, float64(width))
+	cy := parseLengthFloatWithReference(elem.Attributes["cy"], dpi, float64(height))
+	r := parseLengthFloatWithReference(elem.Attributes["r"], dpi, math.Min(float64(width), float64(height)))
 
 	fillColor := parseColor(elem.Attributes["fill"])
 	if isTransparent(fillColor) || r <= 0 {
@@ -387,14 +460,14 @@ func renderCircle(elem *svgElement, img *image.RGBA, rasterizer *vector.Rasteriz
 }
 
 // renderLine renders a line
-func renderLine(elem *svgElement, img *image.RGBA, dpi float64) error {
-	x1 := parseLengthFloat(elem.Attributes["x1"], dpi)
-	y1 := parseLengthFloat(elem.Attributes["y1"], dpi)
-	x2 := parseLengthFloat(elem.Attributes["x2"], dpi)
-	y2 := parseLengthFloat(elem.Attributes["y2"], dpi)
+func renderLine(elem *svgElement, img *image.RGBA, width, height int, dpi float64) error {
+	x1 := parseLengthFloatWithReference(elem.Attributes["x1"], dpi, float64(width))
+	y1 := parseLengthFloatWithReference(elem.Attributes["y1"], dpi, float64(height))
+	x2 := parseLengthFloatWithReference(elem.Attributes["x2"], dpi, float64(width))
+	y2 := parseLengthFloatWithReference(elem.Attributes["y2"], dpi, float64(height))
 
 	strokeColor := parseColor(elem.Attributes["stroke"])
-	strokeWidth := parseLengthFloat(elem.Attributes["stroke-width"], dpi)
+	strokeWidth := parseLengthFloatWithReference(elem.Attributes["stroke-width"], dpi, math.Min(float64(width), float64(height)))
 	if strokeWidth <= 0 {
 		strokeWidth = 1
 	}
