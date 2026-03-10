@@ -178,6 +178,44 @@ func TestExportUnsupportedElementsCanBeIgnored(t *testing.T) {
 	}
 }
 
+func TestExportDefsDoNotRenderContent(t *testing.T) {
+	svgData := `<svg width="100" height="100">
+		<defs>
+			<rect x="0" y="0" width="100" height="100" fill="#ff0000"/>
+		</defs>
+	</svg>`
+
+	result, err := Export(svgData, ExportOptions{
+		Format: FormatPNG,
+		Width:  100,
+		Height: 100,
+	})
+	if err != nil {
+		t.Fatalf("export failed: %v", err)
+	}
+
+	if visible := countVisiblePixelsFromPNG(t, result); visible != 0 {
+		t.Fatalf("expected defs content to be non-rendering, got %d visible pixels", visible)
+	}
+}
+
+func TestExportUnsupportedInsideDefsDoesNotFail(t *testing.T) {
+	svgData := `<svg width="100" height="100">
+		<defs>
+			<clipPath id="c"><path d="M0 0L10 10"/></clipPath>
+		</defs>
+	</svg>`
+
+	_, err := Export(svgData, ExportOptions{
+		Format: FormatPNG,
+		Width:  100,
+		Height: 100,
+	})
+	if err != nil {
+		t.Fatalf("expected defs-only unsupported content to be ignored, got: %v", err)
+	}
+}
+
 func TestExportLineDoesNotFloodCanvas(t *testing.T) {
 	svgData := `<svg width="100" height="100">
 		<line x1="10" y1="10" x2="90" y2="90" stroke="#ff0000" stroke-width="1"/>
@@ -290,6 +328,14 @@ func TestParseLengthFloatSupportsUnits(t *testing.T) {
 		if math.Abs(got-tt.expected) > 0.001 {
 			t.Fatalf("parseLengthFloat(%q) = %f, expected %f", tt.input, got, tt.expected)
 		}
+	}
+}
+
+func TestParseColorUnknownReturnsTransparent(t *testing.T) {
+	c := parseColor("totally-unknown-color")
+	_, _, _, a := c.RGBA()
+	if a != 0 {
+		t.Fatalf("expected unknown colors to be transparent, got alpha=%d", a)
 	}
 }
 

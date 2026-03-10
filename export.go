@@ -57,6 +57,7 @@ func (e *UnsupportedElementsError) Error() string {
 
 type rasterRenderState struct {
 	unsupported map[string]struct{}
+	inDefsDepth int
 }
 
 func newRasterRenderState() *rasterRenderState {
@@ -82,6 +83,20 @@ func (s *rasterRenderState) listUnsupported() []string {
 	}
 	sort.Strings(out)
 	return out
+}
+
+func (s *rasterRenderState) inDefs() bool {
+	return s.inDefsDepth > 0
+}
+
+func (s *rasterRenderState) pushDefs() {
+	s.inDefsDepth++
+}
+
+func (s *rasterRenderState) popDefs() {
+	if s.inDefsDepth > 0 {
+		s.inDefsDepth--
+	}
 }
 
 // DefaultExportOptions returns sensible defaults
@@ -364,12 +379,21 @@ func renderElement(elem *svgElement, img *image.RGBA, rasterizer *vector.Rasteri
 		}
 
 	case "rect":
+		if state.inDefs() {
+			return nil
+		}
 		return renderRect(elem, img, rasterizer, width, height, dpi)
 
 	case "circle":
+		if state.inDefs() {
+			return nil
+		}
 		return renderCircle(elem, img, rasterizer, width, height, dpi)
 
 	case "line":
+		if state.inDefs() {
+			return nil
+		}
 		return renderLine(elem, img, width, height, dpi)
 
 	case "g":
@@ -381,6 +405,8 @@ func renderElement(elem *svgElement, img *image.RGBA, rasterizer *vector.Rasteri
 		}
 
 	case "defs", "clipPath":
+		state.pushDefs()
+		defer state.popDefs()
 		for _, child := range elem.Children {
 			if err := renderElement(child, img, rasterizer, width, height, dpi, state); err != nil {
 				return err
@@ -391,14 +417,20 @@ func renderElement(elem *svgElement, img *image.RGBA, rasterizer *vector.Rasteri
 		// Intentionally ignored non-rendering definitions/metadata.
 
 	case "text":
-		state.addUnsupported("text")
+		if !state.inDefs() {
+			state.addUnsupported("text")
+		}
 
 	case "path":
-		state.addUnsupported("path")
+		if !state.inDefs() {
+			state.addUnsupported("path")
+		}
 
 	default:
 		// Unknown or unsupported element, continue rendering children
-		state.addUnsupported(elem.Tag)
+		if !state.inDefs() {
+			state.addUnsupported(elem.Tag)
+		}
 		for _, child := range elem.Children {
 			if err := renderElement(child, img, rasterizer, width, height, dpi, state); err != nil {
 				return err
@@ -412,6 +444,9 @@ func renderElement(elem *svgElement, img *image.RGBA, rasterizer *vector.Rasteri
 // renderRect renders a rectangle
 func renderRect(elem *svgElement, img *image.RGBA, rasterizer *vector.Rasterizer, width, height int, dpi float64) error {
 	_ = rasterizer
+	if width <= 0 || height <= 0 {
+		return nil
+	}
 	x := parseLengthFloatWithReference(elem.Attributes["x"], dpi, float64(width))
 	y := parseLengthFloatWithReference(elem.Attributes["y"], dpi, float64(height))
 	w := parseLengthFloatWithReference(elem.Attributes["width"], dpi, float64(width))
@@ -436,6 +471,9 @@ func renderRect(elem *svgElement, img *image.RGBA, rasterizer *vector.Rasterizer
 
 // renderCircle renders a circle
 func renderCircle(elem *svgElement, img *image.RGBA, rasterizer *vector.Rasterizer, width, height int, dpi float64) error {
+	if width <= 0 || height <= 0 {
+		return nil
+	}
 	cx := parseLengthFloatWithReference(elem.Attributes["cx"], dpi, float64(width))
 	cy := parseLengthFloatWithReference(elem.Attributes["cy"], dpi, float64(height))
 	r := parseLengthFloatWithReference(elem.Attributes["r"], dpi, math.Min(float64(width), float64(height)))
@@ -461,6 +499,9 @@ func renderCircle(elem *svgElement, img *image.RGBA, rasterizer *vector.Rasteriz
 
 // renderLine renders a line
 func renderLine(elem *svgElement, img *image.RGBA, width, height int, dpi float64) error {
+	if width <= 0 || height <= 0 {
+		return nil
+	}
 	x1 := parseLengthFloatWithReference(elem.Attributes["x1"], dpi, float64(width))
 	y1 := parseLengthFloatWithReference(elem.Attributes["y1"], dpi, float64(height))
 	x2 := parseLengthFloatWithReference(elem.Attributes["x2"], dpi, float64(width))
@@ -510,6 +551,7 @@ func drawThickLine(img *image.RGBA, x1, y1, x2, y2, width float64, c color.Color
 }
 
 func drawBrush(img *image.RGBA, cx, cy, brush, half int, c color.Color) {
+	rgba := color.RGBAModel.Convert(c).(color.RGBA)
 	for oy := -half; oy < brush-half; oy++ {
 		for ox := -half; ox < brush-half; ox++ {
 			x := cx + ox
@@ -517,7 +559,40 @@ func drawBrush(img *image.RGBA, cx, cy, brush, half int, c color.Color) {
 			if !image.Pt(x, y).In(img.Bounds()) {
 				continue
 			}
-			draw.Draw(img, image.Rect(x, y, x+1, y+1), &image.Uniform{C: c}, image.Point{}, draw.Over)
+			i := img.PixOffset(x, y)
+			if rgba.A == 255 {
+				img.Pix[i+0] = rgba.R
+				img.Pix[i+1] = rgba.G
+				img.Pix[i+2] = rgba.B
+				img.Pix[i+3] = 255
+				continue
+			}
+
+			dstR := img.Pix[i+0]
+			dstG := img.Pix[i+1]
+			dstB := img.Pix[i+2]
+			dstA := img.Pix[i+3]
+
+			srcA := int(rgba.A)
+			invA := 255 - srcA
+
+			outA := srcA + (int(dstA)*invA+127)/255
+			if outA == 0 {
+				img.Pix[i+0] = 0
+				img.Pix[i+1] = 0
+				img.Pix[i+2] = 0
+				img.Pix[i+3] = 0
+				continue
+			}
+
+			outR := ((int(rgba.R)*srcA + int(dstR)*invA) + 127) / 255
+			outG := ((int(rgba.G)*srcA + int(dstG)*invA) + 127) / 255
+			outB := ((int(rgba.B)*srcA + int(dstB)*invA) + 127) / 255
+
+			img.Pix[i+0] = uint8(outR)
+			img.Pix[i+1] = uint8(outG)
+			img.Pix[i+2] = uint8(outB)
+			img.Pix[i+3] = uint8(outA)
 		}
 	}
 }
@@ -538,26 +613,28 @@ func parseColor(s string) color.Color {
 
 		if len(s) == 6 {
 			// #RRGGBB
-			if val, err := strconv.ParseUint(s[0:2], 16, 8); err == nil {
-				r = uint8(val)
+			v1, err1 := strconv.ParseUint(s[0:2], 16, 8)
+			v2, err2 := strconv.ParseUint(s[2:4], 16, 8)
+			v3, err3 := strconv.ParseUint(s[4:6], 16, 8)
+			if err1 != nil || err2 != nil || err3 != nil {
+				return color.Transparent
 			}
-			if val, err := strconv.ParseUint(s[2:4], 16, 8); err == nil {
-				g = uint8(val)
-			}
-			if val, err := strconv.ParseUint(s[4:6], 16, 8); err == nil {
-				b = uint8(val)
-			}
+			r = uint8(v1)
+			g = uint8(v2)
+			b = uint8(v3)
 		} else if len(s) == 3 {
 			// #RGB (shorthand)
-			if val, err := strconv.ParseUint(s[0:1], 16, 8); err == nil {
-				r = uint8(val * 17) // 0xF -> 0xFF
+			v1, err1 := strconv.ParseUint(s[0:1], 16, 8)
+			v2, err2 := strconv.ParseUint(s[1:2], 16, 8)
+			v3, err3 := strconv.ParseUint(s[2:3], 16, 8)
+			if err1 != nil || err2 != nil || err3 != nil {
+				return color.Transparent
 			}
-			if val, err := strconv.ParseUint(s[1:2], 16, 8); err == nil {
-				g = uint8(val * 17)
-			}
-			if val, err := strconv.ParseUint(s[2:3], 16, 8); err == nil {
-				b = uint8(val * 17)
-			}
+			r = uint8(v1 * 17) // 0xF -> 0xFF
+			g = uint8(v2 * 17)
+			b = uint8(v3 * 17)
+		} else {
+			return color.Transparent
 		}
 
 		return color.RGBA{R: r, G: g, B: b, A: 255}
@@ -576,7 +653,7 @@ func parseColor(s string) color.Color {
 	case "blue":
 		return color.RGBA{B: 255, A: 255}
 	default:
-		return color.Black
+		return color.Transparent
 	}
 }
 
