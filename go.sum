@@ -1,11 +1,11 @@
 cel.dev/expr v0.24.0 h1:56OvJKSH3hDGL0ml5uSxZmz3/3Pq4tJ+fb1unVLAFcY=
 cel.dev/expr v0.24.0/go.mod h1:hLPLo1W4QUmuYdA72RBX06QTs6MXw941piREPl3Yfiw=
-github.com/SCKelemen/color v1.0.3 h1:cYFQE4LYZ32R/Fjzf3gv+4Bi0shMTRkdpIpD7pD5D0E=
-github.com/SCKelemen/color v1.0.3/go.mod h1:Of/rXNH00Qe2j3crJFlrvezNqDcLMOrRb+lB+/S60Lo=
+github.com/SCKelemen/color v1.0.5 h1:Vzv2fC0/dl5tz8+4yRmnvBfcajvP2oKrZNIi8i+qBMA=
+github.com/SCKelemen/color v1.0.5/go.mod h1:PLsuqFQyG+0jr7c+lz7hi6jDyZrwdmlk1m9+5EcL2nk=
 github.com/SCKelemen/layout v1.1.1 h1:fboKcm39eJRTynCbxe5OWjZwKEemWgJMyV/0s7TuL88=
 github.com/SCKelemen/layout v1.1.1/go.mod h1:61Bc3oyGWcwO9aST05Z/NLoW7sOziYDtvC6Bs8HC+c4=
-github.com/SCKelemen/text v1.1.2 h1:gDgcSxJ+/X2mUjJqDaUZ2cgmzfLW8ZBw5swH6+BKC3s=
-github.com/SCKelemen/text v1.1.2/go.mod h1:R0JK7oSmsRRZ6r8s9a9/ZHGJwRQFPCAp9bp0cJRgt7g=
+github.com/SCKelemen/text v1.1.3 h1:L8tL8IJo+F6eZVov0BHwpzXw+LTDi2OrpOVYanSDy04=
+github.com/SCKelemen/text v1.1.3/go.mod h1:d5I3EII4tPIeMvRwMzzY2ZabZYJEhrFDM9/cBjr0cVY=
 github.com/SCKelemen/unicode v1.1.1 h1:zfDNToPzJcuX8ayJhRipZZd09f+dJO/T4IvIk90d13k=
 github.com/SCKelemen/unicode v1.1.1/go.mod h1:TjSqvWpwZC7BTqAgCfnsweOaS1yIxY039Wubh7xC4G0=
 github.com/SCKelemen/units v1.1.0 h1:Udw9ZEbozOzKH1BbaUu+/NmFG08tn5ypECZEkAl0mU8=
